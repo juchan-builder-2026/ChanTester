@@ -57,14 +57,24 @@ class DisplayMonitor: ObservableObject {
     private var frames: Int = 0
     
     func start() {
+        // onAppear가 여러 번 불려도 링크가 중복 생성되지 않도록 방지
+        guard displayLink == nil else { return }
         maxFPS = UIScreen.main.maximumFramesPerSecond
-        displayLink = CADisplayLink(target: self, selector: #selector(onFrame))
-        displayLink?.add(to: .main, forMode: .common)
+        lastTime = 0
+        frames = 0
+        let link = CADisplayLink(target: self, selector: #selector(onFrame))
+        // ProMotion 120Hz 요청 (Info.plist의 CADisableMinimumFrameDurationOnPhone = YES 필요)
+        let maxRate = Float(maxFPS)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: min(80, maxRate), maximum: maxRate, preferred: maxRate)
+        link.add(to: .main, forMode: .common)
+        displayLink = link
     }
-    
+
     func stop() {
         displayLink?.invalidate()
         displayLink = nil
+        lastTime = 0
+        frames = 0
     }
     
     @objc private func onFrame(link: CADisplayLink) {
@@ -191,7 +201,7 @@ struct ContentView: View {
                     // 5. Hardware & System Specs
                     card(title: "📱 시스템 & 하드웨어 스펙", icon: "cpu", color: .orange) {
                         VStack(spacing: 6) {
-                            infoRow(label: "기기 명칭", val: UIDevice.current.model)
+                            infoRow(label: "기기 명칭", val: getDeviceModelString())
                             infoRow(label: "iOS 버전", val: UIDevice.current.systemVersion)
                             infoRow(label: "CPU 활성 코어", val: "\(ProcessInfo.processInfo.activeProcessorCount) Cores")
                             infoRow(label: "물리 RAM 메모리", val: getMemoryString())
@@ -229,14 +239,51 @@ struct ContentView: View {
         let gen = UIImpactFeedbackGenerator(style: style)
         gen.prepare()
         gen.impactOccurred()
-        hapticLog = "Impact (\(style))"
+        let name: String
+        switch style {
+        case .light: name = "Light"
+        case .medium: name = "Medium"
+        case .heavy: name = "Heavy"
+        case .soft: name = "Soft"
+        case .rigid: name = "Rigid"
+        @unknown default: name = "Unknown"
+        }
+        hapticLog = "Impact (\(name))"
     }
-    
+
     private func triggerNotif(_ type: UINotificationFeedbackGenerator.FeedbackType) {
         let gen = UINotificationFeedbackGenerator()
         gen.prepare()
         gen.notificationOccurred(type)
-        hapticLog = "Notification (\(type))"
+        let name: String
+        switch type {
+        case .success: name = "Success"
+        case .warning: name = "Warning"
+        case .error: name = "Error"
+        @unknown default: name = "Unknown"
+        }
+        hapticLog = "Notification (\(name))"
+    }
+
+    // "iPhone16,1" 같은 하드웨어 식별자 → 사람이 읽는 모델명
+    private func getDeviceModelString() -> String {
+        var info = utsname()
+        uname(&info)
+        let identifier = Mirror(reflecting: info.machine).children.reduce("") { acc, element in
+            guard let value = element.value as? Int8, value != 0 else { return acc }
+            return acc + String(UnicodeScalar(UInt8(value)))
+        }
+        let names: [String: String] = [
+            "iPhone15,2": "iPhone 14 Pro", "iPhone15,3": "iPhone 14 Pro Max",
+            "iPhone15,4": "iPhone 15", "iPhone15,5": "iPhone 15 Plus",
+            "iPhone16,1": "iPhone 15 Pro", "iPhone16,2": "iPhone 15 Pro Max",
+            "iPhone17,1": "iPhone 16 Pro", "iPhone17,2": "iPhone 16 Pro Max",
+            "iPhone17,3": "iPhone 16", "iPhone17,4": "iPhone 16 Plus"
+        ]
+        if let name = names[identifier] {
+            return "\(name) (\(identifier))"
+        }
+        return identifier.isEmpty ? UIDevice.current.model : identifier
     }
     
     private func triggerSelect() {

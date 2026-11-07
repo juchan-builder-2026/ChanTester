@@ -3,10 +3,22 @@ name: Build ChanTester IPA
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# 파일을 하나씩 커밋해도 빌드가 동시에 여러 개 돌지 않도록 한 줄로 세움.
+# 대기 중인 빌드는 최신 push 하나만 남고 나머지는 자동 취소됨.
+# (실행 중인 빌드는 릴리즈 도중 끊기지 않게 취소하지 않음)
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP_NAME: ChanTester
 
 jobs:
   build:
@@ -14,6 +26,17 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
+
+      - name: Read Version From Info.plist
+        id: ver
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Sources/Info.plist)
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Sources/Info.plist)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION ($BUILD)"
+          xcodebuild -version
 
       - name: Install xcodegen
         run: brew install xcodegen
@@ -23,30 +46,60 @@ jobs:
 
       - name: Build App Archive
         run: |
-          xcodebuild -project ChanTester.xcodeproj \
-            -scheme ChanTester \
+          xcodebuild -project "$APP_NAME.xcodeproj" \
+            -scheme "$APP_NAME" \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath build/ChanTester.xcarchive \
+            -archivePath "build/$APP_NAME.xcarchive" \
             archive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
 
       - name: Package Unsigned IPA
         run: |
+          set -euo pipefail
+          APP="Payload/$APP_NAME.app"
           mkdir -p Payload
-          cp -r build/ChanTester.xcarchive/Products/Applications/ChanTester.app Payload/
-          cp Sources/AppIcon*.png Payload/ChanTester.app/ || true
-          cp icon.png Payload/ChanTester.app/AppIcon60x60@3x.png || true
-          zip -qr ChanTester.ipa Payload
-          ls -lh ChanTester.ipa
+          cp -R "build/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app" Payload/
+          # 정확한 해상도의 아이콘(120/180/152px)만 번들 루트에 넣는다. icon.png(마스터)로 덮어쓰지 않음.
+          cp Sources/AppIcon*.png "$APP/"
+          for f in AppIcon60x60@2x.png AppIcon60x60@3x.png; do
+            test -f "$APP/$f" || { echo "::error::missing $f in app bundle"; exit 1; }
+          done
+          ls -l "$APP"/AppIcon*.png
+          zip -qr "$APP_NAME.ipa" Payload
+          ls -l "$APP_NAME.ipa"
 
       - name: Create GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          gh release delete v1.0.1 --yes || true
-          git tag -d v1.0.1 || true
-          gh release create v1.0.1 ChanTester.ipa \
-            --title "ChanTester v1.0.1" \
-            --notes "주찬 전용 아이폰 15 프로 하드웨어 & 사이드로딩 진단 툴 v1.0.1 (Feather 및 iOS 홈 화면 앱 아이콘 에셋 추가)"
+          set -euo pipefail
+          # 같은 버전을 다시 빌드하는 경우: 기존 릴리즈와 '원격' 태그를 함께 삭제해서
+          # 태그가 옛 커밋에 남아 있는 문제를 막는다.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --yes --cleanup-tag
+          elif git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            git push origin ":refs/tags/$TAG"
+          fi
+          gh release create "$TAG" "$APP_NAME.ipa" \
+            --target "$GITHUB_SHA" \
+            --title "$APP_NAME $TAG" \
+            --notes "주찬 전용 아이폰 15 프로 하드웨어 & 사이드로딩 진단 툴 $TAG"
+
+      - name: Summary For Repo JSON
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          SIZE=$(stat -f%z "$APP_NAME.ipa")
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$APP_NAME.ipa"
+          {
+            echo "### Feather 레포(JSON)에 넣을 값"
+            echo "- version: \`$VERSION\`"
+            echo "- size: \`$SIZE\`"
+            echo "- downloadURL: \`$URL\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "version=$VERSION size=$SIZE url=$URL"
