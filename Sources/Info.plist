@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>ChanTester</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.chan.tester</string>
+    <key>CFBundleName</key>
+    <string>ChanTester</string>
+    <key>CFBundleDisplayName</key>
+    <string>찬 테스터</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UIDeviceFamily</key>
+    <array>
+        <integer>1</integer>
+    </array>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>arm64</string>
+    </array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>NSMotionUsageDescription</key>
+    <string>가속도 센서 측정을 위해 권한이 필요합니다.</string>
+</dict>
+</plist>
