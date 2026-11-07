@@ -36,6 +36,8 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r build/ChanTester.xcarchive/Products/Applications/ChanTester.app Payload/
+          cp Sources/AppIcon*.png Payload/ChanTester.app/ || true
+          cp icon.png Payload/ChanTester.app/AppIcon60x60@3x.png || true
           zip -qr ChanTester.ipa Payload
           ls -lh ChanTester.ipa
 
@@ -43,8 +45,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete v1.0.0 --yes || true
-          git tag -d v1.0.0 || true
-          gh release create v1.0.0 ChanTester.ipa \
-            --title "ChanTester v1.0.0" \
-            --notes "주찬 전용 아이폰 15 프로 하드웨어 & 사이드로딩 진단 툴 (JIT, 120Hz ProMotion, Taptic, 가속도계 센서, A17 Pro 스펙)"
+          gh release delete v1.0.1 --yes || true
+          git tag -d v1.0.1 || true
+          gh release create v1.0.1 ChanTester.ipa \
+            --title "ChanTester v1.0.1" \
+            --notes "주찬 전용 아이폰 15 프로 하드웨어 & 사이드로딩 진단 툴 v1.0.1 (Feather 및 iOS 홈 화면 앱 아이콘 에셋 추가)"
