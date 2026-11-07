@@ -1,0 +1,50 @@
+name: Build ChanTester IPA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        run: xcodegen generate
+
+      - name: Build App Archive
+        run: |
+          xcodebuild -project ChanTester.xcodeproj \
+            -scheme ChanTester \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/ChanTester.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Package Unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/ChanTester.xcarchive/Products/Applications/ChanTester.app Payload/
+          zip -qr ChanTester.ipa Payload
+          ls -lh ChanTester.ipa
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete v1.0.0 --yes || true
+          git tag -d v1.0.0 || true
+          gh release create v1.0.0 ChanTester.ipa \
+            --title "ChanTester v1.0.0" \
+            --notes "주찬 전용 아이폰 15 프로 하드웨어 & 사이드로딩 진단 툴 (JIT, 120Hz ProMotion, Taptic, 가속도계 센서, A17 Pro 스펙)"
